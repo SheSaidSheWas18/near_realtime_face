@@ -1,1 +1,8 @@
 README file
+
+Download Deva Ramanan face detection code and put that in "dramanan_files/" directory.
+
+Download OpenCV Viola-Jones implementation and put that in "opencv_files/" directory.
+
+Put the images in "data_dir/" directory in jpg format. 
+If your dataset is a movie, then extract the frames in jpg format and put them in "data_dir" directory.
