@@ -23,6 +23,11 @@ else
 end
 
 %Make a strucuture for previous detections that can be used for tracking
+track_prev.s  = 0;
+track_prev.c  = 0;
+track_prev.xy = 0;
+track_prev.level = 0;
+track_prev.coords = [-1 -1 -1 -1];
 
 
 for i=1:numel(imgs)
@@ -63,13 +68,32 @@ for i=1:numel(imgs)
         
         
         % Face_detect part
-        ww = det(ii,2) - det(ii,1) + 1;
-        hh = det(ii,4) - det(ii,3) + 1;
-        face_bb = [1,size(im,2),1,size(im,1)];
-        face_bb(1) = max(face_bb(1),(round(det(ii,1)-0.3*ww)));
-        face_bb(2) = min(face_bb(2),(round(det(ii,2)+0.3*ww)));
-        face_bb(3) = max(face_bb(3),(round(det(ii,3)-0.3*hh)));
-        face_bb(4) = min(face_bb(4),(round(det(ii,4)+0.3*hh)));
+        if check == -1
+            ww = det(ii,2) - det(ii,1) + 1;
+            hh = det(ii,4) - det(ii,3) + 1;
+            face_bb = [1,size(im,2),1,size(im,1)];
+            face_bb(1) = max(face_bb(1),(round(det(ii,1)-0.3*ww)));
+            face_bb(2) = min(face_bb(2),(round(det(ii,2)+0.3*ww)));
+            face_bb(3) = max(face_bb(3),(round(det(ii,3)-0.3*hh)));
+            face_bb(4) = min(face_bb(4),(round(det(ii,4)+0.3*hh)));
+            face_box = im(face_bb(3):face_bb(4),face_bb(1):face_bb(2),:);
+        else
+            %Get the face_box of the previous tracked frame from the track
+            %structure.
+            
+        end;
+        
+        %Get pyramid level
+        if check == -1
+            lvl = max(7,ceil(((log(size(face_box,1)/(34*4))/(log(2)))*5)+6));
+        else
+            lvl = max(7,bs.level);
+        end;
+        
+        %Compute feature pyramid
+        pyrm = featpyramid(face_box,model,lvl);
+        
+        
         
         
         
