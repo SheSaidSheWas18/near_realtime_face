@@ -6,3 +6,5 @@ Download OpenCV Viola-Jones implementation and put that in "opencv_files/" direc
 
 Put the images in "data_dir/" directory in jpg format. 
 If your dataset is a movie, then extract the frames in jpg format and put them in "data_dir" directory.
+
+All the intermediate and final outputs will be stored in "out_dir/" directory.
