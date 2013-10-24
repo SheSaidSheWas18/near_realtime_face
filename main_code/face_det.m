@@ -29,8 +29,6 @@ track_prev.xy = 0;
 track_prev.level = 0;
 track_prev.coords = [-1 -1 -1 -1];
 
-BOXCACHESIZE = 100000;
-
 [components,filters]  = modelcomponents(model);
 
 for i=1:numel(imgs)
@@ -49,7 +47,6 @@ for i=1:numel(imgs)
     
     %For all the viola-jones detections, check if there is any overlap
     %with the previous detection. If not there is no tracking.
-    
     for ii = 1:n
         
         st = 1;
