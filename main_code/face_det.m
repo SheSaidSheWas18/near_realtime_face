@@ -29,6 +29,9 @@ track_prev.xy = 0;
 track_prev.level = 0;
 track_prev.coords = [-1 -1 -1 -1];
 
+BOXCACHESIZE = 100000;
+
+[components,filters]  = modelcomponents(model);
 
 for i=1:numel(imgs)
     %Load image
@@ -48,6 +51,9 @@ for i=1:numel(imgs)
     %with the previous detection. If not there is no tracking.
     
     for ii = 1:n
+        
+        st = 1;
+        en = length(components);
         
         if global_trflag == 1 && i ~= 1
             
@@ -80,8 +86,27 @@ for i=1:numel(imgs)
         else
             %Get the face_box of the previous tracked frame from the track
             %structure.
+            bs = track_prev(track_num);
+            part_xy = bs.coords;
+            face_box = im(part_xy(2):part_xy(4),part_xy(1):part_xy(3),:);
+            bs.xy(:,1) = bs.xy(:,1) - part_xy(1);
+            bs.xy(:,2) = bs.xy(:,2) - part_xy(2);
+            bs.xy(:,3) = bs.xy(:,3) - part_xy(1);
+            bs.xy(:,4) = bs.xy(:,4) - part_xy(2);
+            
+            st = max(1,bs.c- 1);
+            en = min(13,bs.c+1);
             
         end;
+        
+        BOXCACHESIZE = 100000;
+        cnt = 0;
+        boxes.s  = 0;
+        boxes.c  = 0;
+        boxes.xy = 0;
+        boxes.level = 0;
+        boxes.coords = [-1 -1 -1 -1];
+        boxes(BOXCACHESIZE) = boxes;
         
         %Get pyramid level
         if check == -1
@@ -91,12 +116,137 @@ for i=1:numel(imgs)
         end;
         
         %Compute feature pyramid
-        pyrm = featpyramid(face_box,model,lvl);
+        pyrmd = featpyramid(face_box,model,lvl);
+        resp    = cell(length(pyrmd.feat),1);
         
+        padx  = pyrmd.padx;
+        pady  = pyrmd.pady;
         
+        %For components
+        for cmpn_num = st:en
+            %On pyramid levels
+            for rlvl = lvl-1:lvl+1
+                parts    = components{cmpn_num};
+                numparts = length(parts);
+                
+                %Convolution for each part
+                for part_num = 1:numparts
+                    
+                    % ???
+                    f = parts(part_num).filterid;
+                    level = rlvl-parts(part_num).scale*model.interval;
+                    
+                    %Check if for this level convolution has already been
+                    %done or not
+                    if isempty(resp{level})
+                        scale = pyrmd.scale(level);
+                        
+                        % ?? Which boxes are these
+                        bbs = -1*ones(4,length(filters));
+                        
+                        for cmpn_in = st:en
+                            parts_in = components{cmpn_curr_in};
+                            numparts_in = length(parts_in);
+                            
+                            for part_num_in = 1:numparts_in
+                                % ?? If else
+                                if check == 1 && size(bs.xy,1) == numparts_in
+                                    x1 = floor(((bs.xy(k1,1) - 1)/scale) + 1 + padx);
+                                    y1 = floor(((bs.xy(k1,2) - 1)/scale) + 1 + pady);
+                                    x2 = ceil(((bs.xy(k1,3) - 1)/scale) + 1 + padx);
+                                    y2 = ceil(((bs.xy(k1,4) - 1)/scale) + 1 + pady);
+                                else
+                                    x1 = 3;
+                                    y1 = 3;
+                                    x2 = size(pyra.feat{level},2)-2;
+                                    y2 = size(pyra.feat{level},1)-2;
+                                end;
+                                f_in  = parts_in(part_num_in).filterid;
+                                bbs(:,f_in) = [x1-1 y1-1 x2-1 y2-1];
+                            end;
+                        end;
+                        resp{level} = fconv(pyrmd.feat{level},filters,1, length(filters),bbs);
+                    end;
+                    
+                    parts(part_num).score = resp{level}{f};
+                    parts(part_num).level = level;
+                end;
+                
+                %Shift distance transform
+                for k=numparts:-1:2
+                    child = parts(k);
+                    par   = child.parent;
+                    [Ny,Nx,~] = size(parts(par).score);
+                    
+                    % why this condition??
+                    if check == 1 && size(bs.xy,1) == numparts
+                        ccx1 = floor(((bs.xy(k,1) - 1)/scale) + 1 );%+ padx);
+                        ccy1 = floor(((bs.xy(k,2) - 1)/scale) + 1 );%+ pady);
+                        ccx2 = floor(((bs.xy(k,3) - 1)/scale) + 1 + padx);
+                        ccy2 = floor(((bs.xy(k,4) - 1)/scale) + 1 + pady);
+                        
+                        ppx1 = floor(((bs.xy(par,1) - 1)/scale) + 1 );%+ padx);
+                        ppy1 = floor(((bs.xy(par,2) - 1)/scale) + 1 );%+ pady);
+                        ppx2 = floor(((bs.xy(par,3) - 1)/scale) + 1 + padx);
+                        ppy2 = floor(((bs.xy(par,4) - 1)/scale) + 1 + pady);
+                    else
+                        ccx1 = 1;
+                        ccx2 = size(child.score,2);
+                        ccy1 = 1;
+                        ccy2 = size(child.score,1);
+                        
+                        ppx1 = 1;
+                        ppx2 = Nx;
+                        ppy1 = 1;
+                        ppy2 = Ny;
+                    end;
+                    
+                    [msg,parts(k).Ix,parts(k).Iy] = shiftdt2(child.score, child.w(1),child.w(2),child.w(3),child.w(4), ...
+                        child.startx, child.starty, Nx, Ny, child.step, ...
+                        ppx1, ppy1, ppx2, ppy2, ccx1, ccy1, ccx2, ccy2);
+                    
+                    tmpmsg = msg;
+                    msg = -1000*ones(size(tmpmsg));
+                    msg(ppy1:ppy2,ppx1:ppx2) = tmpmsg(ppy1:ppy2,ppx1:ppx2);
+                    parts(par).score = parts(par).score + msg;
+                end;
+                
+                % Add bias to root score
+                rscore = parts(1).score + parts(1).w;
+                [Y,X] = find(rscore >= thresh);
+                if ~isempty(X)
+                    XY = backtrack( X, Y, parts, pyra);
+                end;
+                
+                
+                % Walk back down tree following pointers
+                for i = 1:length(X)
+                    x = X(i);
+                    y = Y(i);
+                    
+                    if cnt == BOXCACHESIZE
+                        b0 = nms_face(boxes,0.3);
+                        clear boxes;
+                        boxes.s  = 0;
+                        boxes.c  = 0;
+                        boxes.xy = 0;
+                        boxes.level = 0;
+                        boxes(BOXCACHESIZE) = boxes;
+                        cnt = length(b0);
+                        boxes(1:cnt) = b0;
+                    end
+                    
+                    cnt = cnt + 1;
+                    boxes(cnt).c = c;
+                    boxes(cnt).s = rscore(y,x);
+                    boxes(cnt).level = rlevel;
+                    boxes(cnt).xy = XY(:,:,i);
+                end
+            end;
+        end;
         
-        
-        
-        
+        % change the boxes coordinates back to originals. TODO.
     end;
 end;
+
+
