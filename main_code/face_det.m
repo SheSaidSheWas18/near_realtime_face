@@ -34,7 +34,7 @@ track_prev.coords = [-1 -1 -1 -1];
 for i=1:numel(imgs)
     %Load image
     im_path = ['data_dir/' imgs(i).name];
-    im = imread(im_path);
+    im = imread(im_path);   
     
     %Get viola-jones bounding box
     [n det] = runFacedet(im_path,save_flag);
@@ -117,87 +117,84 @@ for i=1:numel(imgs)
                 parts    = components{cmpn_num};
                 numparts = length(parts);
                 
-                %Convolution for each part
-                for part_num = 1:numparts
-                    
-                    % ???
-                    f = parts(part_num).filterid;
-                    level = rlvl-parts(part_num).scale*model.interval;
-                    
-                    %Check if for this level convolution has already been
-                    %done or not
-                    if isempty(resp{level})
-                        scale = pyrmd.scale(level);
-                        
-                        % ?? Which boxes are these
-                        bbs = -1*ones(4,length(filters));
-                        
-                        for cmpn_in = st:en
-                            parts_in = components{cmpn_in};
-                            numparts_in = length(parts_in);
-                            
-                            for part_num_in = 1:numparts_in
-                                % ?? If else
-                                if check == 1 && size(bs.xy,1) == numparts_in
-                                    x1 = floor(((bs.xy(k1,1) - 1)/scale) + 1 + padx);
-                                    y1 = floor(((bs.xy(k1,2) - 1)/scale) + 1 + pady);
-                                    x2 = ceil(((bs.xy(k1,3) - 1)/scale) + 1 + padx);
-                                    y2 = ceil(((bs.xy(k1,4) - 1)/scale) + 1 + pady);
-                                else
-                                    x1 = 3;
-                                    y1 = 3;
-                                    x2 = size(pyrmd.feat{level},2)-2;
-                                    y2 = size(pyrmd.feat{level},1)-2;
-                                end;
-                                f_in  = parts_in(part_num_in).filterid;
-                                bbs(:,f_in) = [x1-1 y1-1 x2-1 y2-1];
-                            end;
-                        end;
-                        resp{level} = fconv(pyrmd.feat{level},filters,1, length(filters),bbs);
-                    end;
-                    
-                    parts(part_num).score = resp{level}{f};
-                    parts(part_num).level = level;
-                end;
+                % Convolution for each part
+                [resp, parts, scale] = part_conv(parts,rlvl,model,resp,pyrmd,filters,st,en,components,bs,check);
                 
-                %Shift distance transform
-                for k=numparts:-1:2
-                    child = parts(k);
-                    par   = child.parent;
-                    [Ny,Nx,~] = size(parts(par).score);
-                    
-                    % why this condition??
-                    if check == 1 && size(bs.xy,1) == numparts
-                        ccx1 = floor(((bs.xy(k,1) - 1)/scale) + 1 );%+ padx);
-                        ccy1 = floor(((bs.xy(k,2) - 1)/scale) + 1 );%+ pady);
-                        ccx2 = floor(((bs.xy(k,3) - 1)/scale) + 1 + padx);
-                        ccy2 = floor(((bs.xy(k,4) - 1)/scale) + 1 + pady);
-                        
-                        ppx1 = floor(((bs.xy(par,1) - 1)/scale) + 1 );%+ padx);
-                        ppy1 = floor(((bs.xy(par,2) - 1)/scale) + 1 );%+ pady);
-                        ppx2 = floor(((bs.xy(par,3) - 1)/scale) + 1 + padx);
-                        ppy2 = floor(((bs.xy(par,4) - 1)/scale) + 1 + pady);
-                    else
-                        ccx1 = 1;
-                        ccx2 = size(child.score,2);
-                        ccy1 = 1;
-                        ccy2 = size(child.score,1);
-                        
-                        ppx1 = 1;
-                        ppx2 = Nx;
-                        ppy1 = 1;
-                        ppy2 = Ny;
-                    end;
-                    
-                    [msg,parts(k).Ix,parts(k).Iy] = shiftdt2(child.score, child.w(1),child.w(2),child.w(3),child.w(4), ...
-                        child.startx, child.starty, Nx, Ny, child.step, ...
-                        ppx1, ppy1, ppx2, ppy2, ccx1, ccy1, ccx2, ccy2);
-                    
-                    tmpmsg = msg;
-                    msg = -1000*ones(size(tmpmsg));
-                    msg(ppy1:ppy2,ppx1:ppx2) = tmpmsg(ppy1:ppy2,ppx1:ppx2);
-                    parts(par).score = parts(par).score + msg;
-                end;
+%                 for part_num = 1:numparts   
+%                     % ???
+%                     f = parts(part_num).filterid;
+%                     level = rlvl-parts(part_num).scale*model.interval;       
+%                     %Check if for this level convolution has already been        %done or not
+%                     if isempty(resp{level})
+%                         scale = pyrmd.scale(level);
+%                         % ?? Which boxes are these
+%                         bbs = -1*ones(4,length(filters));
+%                         for cmpn_in = st:en
+%                             parts_in = components{cmpn_in};
+%                             numparts_in = length(parts_in);
+%                             for part_num_in = 1:numparts_in
+%                                 % ?? If else
+%                                 if check == 1 && size(bs.xy,1) == numparts_in
+%                                     x1 = floor(((bs.xy(k1,1) - 1)/scale) + 1 + padx);
+%                                     y1 = floor(((bs.xy(k1,2) - 1)/scale) + 1 + pady);
+%                                     x2 = ceil(((bs.xy(k1,3) - 1)/scale) + 1 + padx);
+%                                     y2 = ceil(((bs.xy(k1,4) - 1)/scale) + 1 + pady);
+%                                 else
+%                                     x1 = 3;
+%                                     y1 = 3;
+%                                     x2 = size(pyrmd.feat{level},2)-2;
+%                                     y2 = size(pyrmd.feat{level},1)-2;
+%                                 end;
+%                                 f_in  = parts_in(part_num_in).filterid;
+%                                 bbs(:,f_in) = [x1-1 y1-1 x2-1 y2-1];
+%                             end;
+%                         end;
+%                         resp{level} = fconv(pyrmd.feat{level},filters,1, length(filters),bbs);
+%                     end;
+%                     
+%                     parts(part_num).score = resp{level}{f};
+%                     parts(part_num).level = level;
+%                 end;
+%                 
+                % Shift distance transform
+                parts = part_shiftdt(numparts,parts,check,bs,scale,padx,pady);
+%                 for k=numparts:-1:2
+%                     child = parts(k);
+%                     par   = child.parent;
+%                     [Ny,Nx,~] = size(parts(par).score);
+%                     
+%                     % why this condition??
+%                     if check == 1 && size(bs.xy,1) == numparts
+%                         ccx1 = floor(((bs.xy(k,1) - 1)/scale) + 1 );%+ padx);
+%                         ccy1 = floor(((bs.xy(k,2) - 1)/scale) + 1 );%+ pady);
+%                         ccx2 = floor(((bs.xy(k,3) - 1)/scale) + 1 + padx);
+%                         ccy2 = floor(((bs.xy(k,4) - 1)/scale) + 1 + pady);
+%                         
+%                         ppx1 = floor(((bs.xy(par,1) - 1)/scale) + 1 );%+ padx);
+%                         ppy1 = floor(((bs.xy(par,2) - 1)/scale) + 1 );%+ pady);
+%                         ppx2 = floor(((bs.xy(par,3) - 1)/scale) + 1 + padx);
+%                         ppy2 = floor(((bs.xy(par,4) - 1)/scale) + 1 + pady);
+%                     else
+%                         ccx1 = 1;
+%                         ccx2 = size(child.score,2);
+%                         ccy1 = 1;
+%                         ccy2 = size(child.score,1);
+%                         
+%                         ppx1 = 1;
+%                         ppx2 = Nx;
+%                         ppy1 = 1;
+%                         ppy2 = Ny;
+%                     end;
+%                     
+%                     [msg,parts(k).Ix,parts(k).Iy] = shiftdt2(child.score, child.w(1),child.w(2),child.w(3),child.w(4), ...
+%                         child.startx, child.starty, Nx, Ny, child.step, ...
+%                         ppx1, ppy1, ppx2, ppy2, ccx1, ccy1, ccx2, ccy2);
+%                     
+%                     tmpmsg = msg;
+%                     msg = -1000*ones(size(tmpmsg));
+%                     msg(ppy1:ppy2,ppx1:ppx2) = tmpmsg(ppy1:ppy2,ppx1:ppx2);
+%                     parts(par).score = parts(par).score + msg;
+%                 end;
                 
                 % Add bias to root score
                 rscore = parts(1).score + parts(1).w;
